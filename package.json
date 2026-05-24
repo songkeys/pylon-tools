@@ -1,0 +1,67 @@
+{
+  "name": "pylon-tools",
+  "version": "0.1.0",
+  "description": "Vercel AI SDK tools for the Pylon API",
+  "keywords": [
+    "agent",
+    "ai",
+    "ai-sdk",
+    "crm",
+    "pylon",
+    "support",
+    "tools"
+  ],
+  "homepage": "https://github.com/songkeys/pylon-tools",
+  "bugs": {
+    "url": "https://github.com/songkeys/pylon-tools/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/songkeys/pylon-tools.git"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "fmt": "oxfmt .",
+    "fmt:check": "oxfmt . --check",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "prepack": "pnpm build",
+    "release": "bumpp",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "ai": "^6.0.191",
+    "bumpp": "^11.1.0",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "ai": "^6.0.0",
+    "zod": "^4.0.0"
+  },
+  "packageManager": "pnpm@11.1.1"
+}
