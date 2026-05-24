@@ -11,6 +11,7 @@ import {
   type EndpointToolName,
   type WriteEndpointToolName,
 } from "./endpoint-definitions";
+import { sanitizeToolOverrides } from "./tool-overrides";
 import { createPylonEndpointTools } from "./tools/endpoints";
 import type { ToolOverrides } from "./types";
 
@@ -110,12 +111,34 @@ const PRESET_TOOLS = {
   ],
 } as const satisfies Record<PylonToolPreset, readonly PylonToolName[]>;
 
-function endpointToolNamesFor(resources: readonly string[]): EndpointToolName[] {
+type PylonToolMap = ReturnType<typeof createAllPylonTools>;
+type EndpointDefinitionForResource<Resource extends string> =
+  (typeof ENDPOINT_DEFINITIONS)[number] extends infer Definition
+    ? Definition extends { readonly name: infer Name; readonly resource: Resource }
+      ? Name
+      : never
+    : never;
+type EndpointToolNamesForResources<Resources extends readonly string[]> = Extract<
+  EndpointDefinitionForResource<Resources[number]>,
+  EndpointToolName
+>[];
+export type PylonPresetTools<Preset extends PylonToolPreset> = Pick<
+  PylonToolMap,
+  Extract<(typeof PRESET_TOOLS)[Preset][number], keyof PylonToolMap>
+>;
+export type PylonPresetArrayTools<Presets extends readonly PylonToolPreset[]> = Pick<
+  PylonToolMap,
+  Extract<(typeof PRESET_TOOLS)[Presets[number]][number], keyof PylonToolMap>
+>;
+
+function endpointToolNamesFor<const Resources extends readonly string[]>(
+  resources: Resources,
+): EndpointToolNamesForResources<Resources> {
   const resourceSet = new Set(resources);
 
   return ENDPOINT_DEFINITIONS.filter((endpoint) => resourceSet.has(endpoint.resource)).map(
     (endpoint) => endpoint.name,
-  ) as EndpointToolName[];
+  ) as EndpointToolNamesForResources<Resources>;
 }
 
 export type PylonToolsOptions = {
@@ -141,34 +164,11 @@ export type PylonToolsOptions = {
   preset?: PylonToolPreset | PylonToolPreset[];
 };
 
-function resolvePresetTools(
-  preset?: PylonToolPreset | PylonToolPreset[],
-): Set<PylonToolName> | null {
-  if (!preset) return null;
-
-  const presets = Array.isArray(preset) ? preset : [preset];
-  const tools = new Set<PylonToolName>();
-
-  for (const name of presets) {
-    for (const toolName of PRESET_TOOLS[name]) tools.add(toolName);
-  }
-
-  return tools;
-}
-
-export function createPylonTools({
-  apiKey,
-  overrides,
-  preset,
-  requireApproval = true,
-}: PylonToolsOptions = {}) {
-  const resolvedApiKey = resolvePylonApiKey(apiKey);
-  const allowed = resolvePresetTools(preset);
-  const approval = (name: PylonWriteToolName) => ({
-    needsApproval: resolveApproval(name, requireApproval),
-  });
-
-  const allTools = {
+function createAllPylonTools(
+  resolvedApiKey: string,
+  approvalFor: (name: PylonWriteToolName) => ToolOverrides,
+) {
+  return {
     getAccount: getAccount(resolvedApiKey),
     getContact: getContact(resolvedApiKey),
     getIssue: getIssue(resolvedApiKey),
@@ -185,14 +185,55 @@ export function createPylonTools({
     searchContacts: searchContacts(resolvedApiKey),
     searchIssues: searchIssues(resolvedApiKey),
     searchUsers: searchUsers(resolvedApiKey),
-    ...createPylonEndpointTools(resolvedApiKey, approval),
+    ...createPylonEndpointTools(resolvedApiKey, approvalFor),
   };
+}
+
+function resolvePresetTools(
+  preset?: PylonToolPreset | PylonToolPreset[],
+): Set<PylonToolName> | null {
+  if (!preset) return null;
+
+  const presets = Array.isArray(preset) ? preset : [preset];
+  const tools = new Set<PylonToolName>();
+
+  for (const name of presets) {
+    for (const toolName of PRESET_TOOLS[name]) tools.add(toolName);
+  }
+
+  return tools;
+}
+
+export function createPylonTools(options?: Omit<PylonToolsOptions, "preset">): PylonToolMap;
+export function createPylonTools(
+  options: Omit<PylonToolsOptions, "preset"> & { preset: "all" },
+): PylonToolMap;
+export function createPylonTools<Preset extends Exclude<PylonToolPreset, "all">>(
+  options: Omit<PylonToolsOptions, "preset"> & { preset: Preset },
+): PylonPresetTools<Preset>;
+export function createPylonTools<const Presets extends readonly PylonToolPreset[]>(
+  options: Omit<PylonToolsOptions, "preset"> & { preset: Presets },
+): PylonPresetArrayTools<Presets>;
+export function createPylonTools({
+  apiKey,
+  overrides,
+  preset,
+  requireApproval = true,
+}: PylonToolsOptions = {}): PylonToolMap | Partial<PylonToolMap> {
+  const resolvedApiKey = resolvePylonApiKey(apiKey);
+  const allowed = resolvePresetTools(preset);
+  const approval = (name: PylonWriteToolName) => ({
+    needsApproval: resolveApproval(name, requireApproval),
+  });
+  const allTools = createAllPylonTools(resolvedApiKey, approval);
 
   if (overrides) {
     for (const [name, toolOverrides] of Object.entries(overrides)) {
       if (name in allTools && toolOverrides) {
         const key = name as keyof typeof allTools;
-        Object.assign(allTools, { [key]: { ...allTools[key], ...toolOverrides } });
+        Object.assign(allTools, {
+          [key]: { ...allTools[key], ...sanitizeToolOverrides(toolOverrides) },
+        });
       }
     }
   }
@@ -209,7 +250,7 @@ function resolveApproval(name: PylonWriteToolName, config: ApprovalConfig = true
   return config[name] ?? true;
 }
 
-export type PylonTools = ReturnType<typeof createPylonTools>;
+export type PylonTools = PylonToolMap;
 
 export { PylonApiError, PylonClient, createPylonClient } from "./client";
 export type { PylonClientOptions, PylonHttpMethod } from "./client";

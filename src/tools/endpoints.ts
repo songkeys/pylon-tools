@@ -10,6 +10,7 @@ import {
   type FieldKind,
   type WriteEndpointToolName,
 } from "../endpoint-definitions";
+import { sanitizeToolOverrides } from "../tool-overrides";
 import type { ToolOverrides } from "../types";
 
 type JsonValue =
@@ -34,6 +35,7 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 );
 const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
 const WRITE_TOOL_NAME_SET = new Set<string>(WRITE_ENDPOINT_TOOL_NAMES);
+const fileSchema = z.any().describe("Fetch-compatible Blob or File value for multipart upload");
 
 type EndpointInput = Record<string, unknown>;
 
@@ -93,7 +95,13 @@ export function createPylonEndpointTool(
     throw new Error(`Unknown Pylon endpoint tool: ${name}`);
   }
 
-  return createEndpointTool(apiKey, definition, options);
+  const safeOptions = sanitizeToolOverrides(options);
+
+  if (isWriteEndpointToolName(name) && safeOptions.needsApproval === undefined) {
+    safeOptions.needsApproval = true;
+  }
+
+  return createEndpointTool(apiKey, definition, safeOptions);
 }
 
 function createEndpointTool(
@@ -102,10 +110,10 @@ function createEndpointTool(
   options: ToolOverrides = {},
 ) {
   return tool({
-    ...options,
     description: describeEndpoint(definition),
     inputSchema: inputSchemaFor(definition),
     execute: async (input) => executeEndpointStep({ apiKey, definition, input }),
+    ...sanitizeToolOverrides(options),
   });
 }
 
@@ -143,6 +151,10 @@ function schemaForKind(kind: FieldKind): z.ZodTypeAny {
       return z.array(jsonValueSchema);
     case "boolean":
       return z.boolean();
+    case "file":
+      return fileSchema;
+    case "fileArray":
+      return z.array(fileSchema);
     case "integer":
       return z.number().int();
     case "number":
@@ -178,12 +190,27 @@ function collectFields(
 
   const values: Record<string, unknown> = {};
 
-  for (const [name] of fields) {
+  for (const field of fields) {
+    const [name] = field;
     const value = input[name];
-    if (value !== undefined) values[name] = value;
+    if (value !== undefined) values[name] = validateEndpointField(field, value);
   }
 
   return Object.keys(values).length === 0 ? undefined : values;
+}
+
+function validateEndpointField([name, kind]: FieldDefinition, value: unknown) {
+  if (kind === "file" && !isBlob(value)) {
+    throw new Error(`${name} must be a fetch-compatible Blob or File.`);
+  }
+
+  if (kind === "fileArray") {
+    if (!Array.isArray(value) || value.some((item) => !isBlob(item))) {
+      throw new Error(`${name} must be an array of fetch-compatible Blob or File values.`);
+    }
+  }
+
+  return value;
 }
 
 function pathFieldsFor(definition: EndpointDefinition): FieldDefinition[] {
@@ -207,4 +234,8 @@ function describeEndpoint(definition: EndpointDefinition): string {
 
 function isWriteEndpointToolName(name: string): name is WriteEndpointToolName {
   return WRITE_TOOL_NAME_SET.has(name);
+}
+
+function isBlob(value: unknown): value is Blob {
+  return typeof Blob !== "undefined" && value instanceof Blob;
 }

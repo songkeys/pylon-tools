@@ -1,7 +1,15 @@
 // Endpoint metadata is derived from Pylon's public OpenAPI document.
 // Source: https://static.usepylon.com/openapi.json
 
-export type FieldKind = "array" | "boolean" | "integer" | "number" | "object" | "string";
+export type FieldKind =
+  | "array"
+  | "boolean"
+  | "file"
+  | "fileArray"
+  | "integer"
+  | "number"
+  | "object"
+  | "string";
 export type FieldDefinition = readonly [name: string, kind: FieldKind, required: boolean];
 
 export type EndpointDefinition = {
@@ -148,7 +156,7 @@ export const ENDPOINT_DEFINITIONS = [
     summary: "Upload files to an account",
     bodyContentType: "multipart/form-data",
     bodyFields: [
-      ["file", "string", false],
+      ["file", "file", false],
       ["file_url", "string", false],
     ],
     mutates: true,
@@ -170,7 +178,7 @@ export const ENDPOINT_DEFINITIONS = [
     bodyContentType: "multipart/form-data",
     bodyFields: [
       ["description", "string", false],
-      ["file", "string", false],
+      ["file", "file", false],
       ["file_url", "string", false],
     ],
     mutates: true,
@@ -1369,7 +1377,7 @@ export const ENDPOINT_DEFINITIONS = [
     bodyFields: [
       ["external_ids", "array", false],
       ["file_names", "array", false],
-      ["files", "array", true],
+      ["files", "fileArray", true],
       ["training_data_id", "string", false],
       ["training_data_name", "string", false],
       ["visibility", "string", false],

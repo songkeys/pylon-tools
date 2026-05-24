@@ -104,6 +104,8 @@ createPylonTools({
 });
 ```
 
+The same default applies when cherry-picking OpenAPI-backed endpoint tools directly with `createPylonEndpointTool` or `createPylonEndpointTools`. Pass `needsApproval: false` only when you intentionally want a specific mutation tool to run without approval.
+
 Use `PylonWriteToolName` for a typed approval map:
 
 ```ts
