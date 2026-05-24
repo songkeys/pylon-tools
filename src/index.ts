@@ -35,7 +35,14 @@ const ALL_TOOL_NAMES = [
 export type PylonToolName = (typeof ALL_TOOL_NAMES)[number];
 export type PylonWriteToolName = WriteEndpointToolName;
 export type ApprovalConfig = boolean | Partial<Record<PylonWriteToolName, boolean>>;
-export type PylonToolPreset = "accounts" | "admin" | "all" | "knowledge" | "people" | "support";
+export type PylonToolPreset =
+  | "accounts"
+  | "admin"
+  | "all"
+  | "explorer"
+  | "knowledge"
+  | "people"
+  | "support";
 
 const ACCOUNT_ENDPOINT_TOOLS = endpointToolNamesFor([
   "account-highlights",
@@ -81,6 +88,17 @@ const ADMIN_ENDPOINT_TOOLS = endpointToolNamesFor([
   "user-roles",
 ]);
 const PEOPLE_ENDPOINT_TOOLS = endpointToolNamesFor(["contacts", "teams", "user", "user-roles"]);
+const READ_TOOLS = [
+  ...ISSUE_TOOLS,
+  ...ACCOUNT_TOOLS,
+  ...CONTACT_TOOLS,
+  ...USER_TOOLS,
+  ...TEAM_TOOLS,
+  ...IDENTITY_TOOLS,
+] as const;
+const READ_ENDPOINT_TOOLS = ENDPOINT_DEFINITIONS.filter((endpoint) => !endpoint.mutates).map(
+  (endpoint) => endpoint.name,
+) as ReadEndpointToolName[];
 
 const PRESET_TOOLS = {
   accounts: [
@@ -92,6 +110,7 @@ const PRESET_TOOLS = {
   ],
   admin: [...IDENTITY_TOOLS, ...ADMIN_ENDPOINT_TOOLS],
   all: ALL_TOOL_NAMES,
+  explorer: [...READ_TOOLS, ...READ_ENDPOINT_TOOLS],
   knowledge: [...IDENTITY_TOOLS, ...KNOWLEDGE_ENDPOINT_TOOLS],
   people: [
     ...CONTACT_TOOLS,
@@ -112,6 +131,11 @@ const PRESET_TOOLS = {
 } as const satisfies Record<PylonToolPreset, readonly PylonToolName[]>;
 
 type PylonToolMap = ReturnType<typeof createAllPylonTools>;
+type ReadEndpointToolName = Extract<
+  (typeof ENDPOINT_DEFINITIONS)[number],
+  { readonly mutates: false }
+>["name"] &
+  EndpointToolName;
 type EndpointDefinitionForResource<Resource extends string> =
   (typeof ENDPOINT_DEFINITIONS)[number] extends infer Definition
     ? Definition extends { readonly name: infer Name; readonly resource: Resource }

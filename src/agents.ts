@@ -15,6 +15,8 @@ const PRESET_INSTRUCTIONS: Record<PylonToolPreset, string> = {
   admin:
     "You are a Pylon admin assistant. Help users manage custom fields, custom objects, tags, teams, user roles, macros, ticket forms, training data, and audit-log investigation.",
   all: DEFAULT_INSTRUCTIONS,
+  explorer:
+    "You are a read-only Pylon explorer. Help users inspect and understand issues, messages, accounts, contacts, users, teams, knowledge bases, surveys, tasks, audit logs, tags, custom fields, and related records without making changes.",
   knowledge:
     "You are a Pylon knowledge assistant. Help users manage knowledge bases, collections, articles, route redirects, feature requests, and training data.",
   people:

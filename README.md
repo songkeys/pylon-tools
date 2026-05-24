@@ -59,6 +59,9 @@ createPylonTools({ apiKey, preset: "admin" });
 // People operations: contacts, users, teams, user roles, and token identity
 createPylonTools({ apiKey, preset: "people" });
 
+// Read-only exploration across every Pylon API area
+createPylonTools({ apiKey, preset: "explorer" });
+
 // Everything this package exposes
 createPylonTools({ apiKey, preset: "all" });
 ```
@@ -76,6 +79,7 @@ createPylonTools({ apiKey, preset: ["accounts", "people"] });
 | `people`    | Contacts, users, teams, user roles, and token identity                                   |
 | `knowledge` | Knowledge bases, articles, collections, route redirects, feature requests, training data |
 | `admin`     | Audit logs, custom fields, custom objects, tags, teams, macros, ticket forms             |
+| `explorer`  | All read-only tools across Pylon API areas                                               |
 | `all`       | All 128 tools                                                                            |
 
 Omit `preset` to get all tools, same as `all`.
@@ -266,7 +270,14 @@ type PylonToolsOptions = {
   overrides?: Partial<Record<PylonToolName, ToolOverrides>>;
 };
 
-type PylonToolPreset = "support" | "accounts" | "people" | "knowledge" | "admin" | "all";
+type PylonToolPreset =
+  | "support"
+  | "accounts"
+  | "people"
+  | "knowledge"
+  | "admin"
+  | "explorer"
+  | "all";
 ```
 
 ### `createPylonAgent(options)`
