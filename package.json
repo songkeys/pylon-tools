@@ -1,6 +1,6 @@
 {
   "name": "pylon-tools",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Vercel AI SDK tools for the Pylon API",
   "keywords": [
     "agent",
