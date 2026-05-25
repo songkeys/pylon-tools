@@ -2,7 +2,12 @@ import { tool } from "ai";
 import { z } from "zod";
 import { createPylonClient } from "../client";
 import { summarizePage } from "../pagination";
-import { cursorSchema, limitSchema, searchParamsSchema, type SearchFilter } from "../schemas";
+import {
+  cursorSchema,
+  limitSchema,
+  textSearchParamsSchema,
+  type TextSearchParams,
+} from "../schemas";
 
 async function getAccountStep({ apiKey, id }: { apiKey: string; id: string }) {
   "use step";
@@ -52,15 +57,22 @@ async function searchAccountsStep({
   cursor,
   filter,
   limit,
+  search_text,
 }: {
   apiKey: string;
   cursor?: string | undefined;
-  filter: SearchFilter;
+  filter: TextSearchParams["filter"];
   limit: number;
+  search_text?: string | undefined;
 }) {
   "use step";
   const client = createPylonClient(apiKey);
-  const params = cursor === undefined ? { filter, limit } : { cursor, filter, limit };
+  const params = {
+    filter,
+    limit,
+    ...(cursor === undefined ? {} : { cursor }),
+    ...(search_text === undefined ? {} : { search_text }),
+  };
 
   return summarizePage(client.accounts.search(params));
 }
@@ -69,6 +81,6 @@ export const searchAccounts = (apiKey: string) =>
   tool({
     description:
       "Search Pylon accounts by filter. Useful for finding customer accounts by domain, name, tags, or custom fields.",
-    inputSchema: searchParamsSchema,
+    inputSchema: textSearchParamsSchema,
     execute: async (args) => searchAccountsStep({ apiKey, ...args }),
   });

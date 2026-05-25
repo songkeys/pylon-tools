@@ -3,6 +3,14 @@ import { z } from "zod";
 const passthroughObject = <Shape extends z.ZodRawShape>(shape: Shape) =>
   z.object(shape).passthrough();
 
+const nullishString = z.string().nullish();
+const nullishBoolean = z.boolean().nullish();
+const nullishNumber = z.number().nullish();
+const nullishInteger = z.number().int().nullish();
+const nullishStringArray = z.array(z.string()).nullish();
+const nullishArray = <ItemSchema extends z.ZodTypeAny>(itemSchema: ItemSchema) =>
+  z.array(itemSchema).nullish();
+
 export const cursorSchema = z
   .string()
   .optional()
@@ -19,7 +27,7 @@ export const limitSchema = z
 
 export type SearchFilter = {
   field?: string | undefined;
-  operator?: string | undefined;
+  operator: string;
   subfilters?: SearchFilter[] | undefined;
   value?: string | undefined;
   values?: string[] | undefined;
@@ -28,10 +36,7 @@ export type SearchFilter = {
 export const searchFilterSchema: z.ZodType<SearchFilter> = z.lazy(() =>
   passthroughObject({
     field: z.string().optional().describe("Pylon field name to filter on"),
-    operator: z
-      .string()
-      .optional()
-      .describe("Pylon filter operator, such as equals, in, not_in, and, or"),
+    operator: z.string().describe("Pylon filter operator, such as equals, in, not_in, and, or"),
     subfilters: z
       .array(searchFilterSchema)
       .optional()
@@ -45,6 +50,13 @@ export const searchParamsSchema = z.object({
   cursor: cursorSchema,
   filter: searchFilterSchema,
   limit: limitSchema,
+});
+
+export const textSearchParamsSchema = searchParamsSchema.extend({
+  search_text: z
+    .string()
+    .optional()
+    .describe("Optional fuzzy text search intersected with the provided filter"),
 });
 
 export const issueListParamsSchema = z.object({
@@ -63,200 +75,221 @@ export const contactRetrieveParamsSchema = z.object({
 });
 
 export const paginationSchema = passthroughObject({
-  cursor: z.string().optional(),
-  has_next_page: z.boolean().optional(),
+  cursor: nullishString,
+  has_next_page: nullishBoolean,
 });
 
 export const errorResponseSchema = passthroughObject({
   errors: z.array(z.string()).optional(),
-  request_id: z.string().optional(),
+  request_id: nullishString,
 });
 
 export const apiResponseSchema = <DataSchema extends z.ZodType>(dataSchema: DataSchema) =>
   passthroughObject({
-    data: dataSchema.optional(),
-    request_id: z.string().optional(),
+    data: dataSchema.nullish(),
+    request_id: nullishString,
   });
 
 export const pageResponseSchema = <ItemSchema extends z.ZodType>(itemSchema: ItemSchema) =>
   passthroughObject({
-    data: z.array(itemSchema).optional(),
-    pagination: paginationSchema.optional(),
-    request_id: z.string().optional(),
+    data: z.array(itemSchema).nullish(),
+    pagination: paginationSchema.nullish(),
+    request_id: nullishString,
   });
 
 export const genericResponseSchema = z.unknown();
 
 export const userReferenceSchema = passthroughObject({
-  email: z.string().optional(),
-  id: z.string().optional(),
+  email: nullishString,
+  id: nullishString,
 });
-
-export const customFieldValueSchema = passthroughObject({
-  slug: z.string().optional(),
-  value: z.string().optional(),
-  values: z.array(z.string()).optional(),
-});
-
-export const customFieldsSchema = z.record(z.string(), customFieldValueSchema);
 
 export const externalIdSchema = passthroughObject({
-  external_id: z.string().optional(),
-  label: z.string().optional(),
+  external_id: nullishString,
+  label: nullishString,
 });
 
+export const accountReferenceSchema = passthroughObject({
+  external_ids: nullishArray(externalIdSchema),
+  id: nullishString,
+});
+
+export const contactReferenceSchema = passthroughObject({
+  email: nullishString,
+  id: nullishString,
+});
+
+export const issueReferenceSchema = passthroughObject({
+  id: nullishString,
+  number: nullishInteger,
+});
+
+export const teamReferenceSchema = passthroughObject({
+  id: nullishString,
+});
+
+const customFieldScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
+export const customFieldValueSchema = passthroughObject({
+  slug: nullishString,
+  value: customFieldScalarSchema.optional(),
+  values: z.array(customFieldScalarSchema).nullish(),
+});
+
+export const customFieldsSchema = z.record(z.string(), z.union([customFieldValueSchema, z.null()]));
+
 export const channelSchema = passthroughObject({
-  channel_id: z.string().optional(),
-  is_internal: z.boolean().optional(),
-  is_primary: z.boolean().optional(),
+  channel_id: nullishString,
+  channel_name: nullishString,
+  channel_url: nullishString,
+  is_internal: nullishBoolean,
+  is_primary: nullishBoolean,
   mirror_to: passthroughObject({
-    channel_id: z.string().optional(),
-    source: z.string().optional(),
-  }).optional(),
-  source: z.string().optional(),
+    channel_id: nullishString,
+    source: nullishString,
+  }).nullish(),
+  source: nullishString,
 });
 
 export const accountSchema = passthroughObject({
-  channels: z.array(channelSchema).optional(),
-  created_at: z.string().optional(),
+  channels: nullishArray(channelSchema),
+  created_at: nullishString,
   crm_settings: passthroughObject({
     details: z
       .array(
         passthroughObject({
-          id: z.string().optional(),
-          source: z.string().optional(),
+          id: nullishString,
+          source: nullishString,
         }),
       )
-      .optional(),
-  }).optional(),
-  custom_fields: customFieldsSchema.optional(),
-  domain: z.string().optional(),
-  domains: z.array(z.string()).optional(),
-  external_ids: z.array(externalIdSchema).optional(),
-  id: z.string().optional(),
-  is_disabled: z.boolean().optional(),
-  latest_customer_activity_time: z.string().optional(),
-  name: z.string().optional(),
-  owner: userReferenceSchema.optional(),
-  primary_domain: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  type: z.string().optional(),
+      .nullish(),
+  }).nullish(),
+  custom_fields: customFieldsSchema.nullish(),
+  domain: nullishString,
+  domains: nullishStringArray,
+  external_ids: nullishArray(externalIdSchema),
+  id: nullishString,
+  is_disabled: nullishBoolean,
+  latest_customer_activity_time: nullishString,
+  name: nullishString,
+  owner: userReferenceSchema.nullish(),
+  primary_domain: nullishString,
+  tags: nullishStringArray,
+  type: nullishString,
+  updated_at: nullishString,
 });
 
 export const contactSchema = passthroughObject({
-  account: passthroughObject({
-    id: z.string().optional(),
-  }).optional(),
-  avatar_url: z.string().optional(),
-  custom_fields: customFieldsSchema.optional(),
-  email: z.string().optional(),
-  emails: z.array(z.string()).optional(),
-  external_ids: z.array(externalIdSchema).optional(),
-  id: z.string().optional(),
+  account: accountReferenceSchema.nullish(),
+  avatar_url: nullishString,
+  custom_fields: customFieldsSchema.nullish(),
+  email: nullishString,
+  emails: nullishStringArray,
+  external_ids: nullishArray(externalIdSchema),
+  id: nullishString,
   integration_user_ids: z
     .array(
       passthroughObject({
-        id: z.string().optional(),
-        source: z.string().optional(),
+        id: nullishString,
+        source: nullishString,
       }),
     )
-    .optional(),
-  name: z.string().optional(),
-  phone_numbers: z.array(z.string()).optional(),
-  portal_role: z.string().optional(),
-  portal_role_id: z.string().optional(),
-  primary_phone_number: z.string().optional(),
+    .nullish(),
+  name: nullishString,
+  phone_numbers: nullishStringArray,
+  portal_role: nullishString,
+  portal_role_id: nullishString,
+  primary_phone_number: nullishString,
 });
 
-const secondsByStatusSchema = z.record(z.string(), z.number());
+const secondsByStatusSchema = z.record(z.string(), nullishNumber);
 
 export const issueSchema = passthroughObject({
-  account: passthroughObject({
-    id: z.string().optional(),
-  }).optional(),
-  assignee: userReferenceSchema.optional(),
-  attachment_urls: z.array(z.string()).optional(),
-  author_unverified: z.boolean().optional(),
-  body_html: z.string().optional(),
-  business_hours_first_response_seconds: z.number().optional(),
-  business_hours_resolution_seconds: z.number().optional(),
-  business_hours_time_in_status_seconds: secondsByStatusSchema.optional(),
+  account: accountReferenceSchema.nullish(),
+  assignee: userReferenceSchema.nullish(),
+  attachment_urls: nullishStringArray,
+  author_unverified: nullishBoolean,
+  body_html: nullishString,
+  business_hours_first_response_seconds: nullishInteger,
+  business_hours_resolution_seconds: nullishInteger,
+  business_hours_time_in_status_seconds: secondsByStatusSchema.nullish(),
   chat_widget_info: passthroughObject({
-    page_url: z.string().optional(),
-  }).optional(),
-  created_at: z.string().optional(),
+    page_url: nullishString,
+  }).nullish(),
+  child_issues: nullishArray(issueReferenceSchema),
+  created_at: nullishString,
   csat_responses: z
     .array(
       passthroughObject({
-        comment: z.string().optional(),
-        score: z.number().optional(),
+        comment: nullishString,
+        score: nullishInteger,
       }),
     )
-    .optional(),
-  custom_fields: customFieldsSchema.optional(),
-  customer_portal_visible: z.boolean().optional(),
+    .nullish(),
+  custom_fields: customFieldsSchema.nullish(),
+  customer_portal_visible: nullishBoolean,
   external_issues: z
     .array(
       passthroughObject({
-        external_id: z.string().optional(),
-        link: z.string().optional(),
-        source: z.string().optional(),
+        external_id: nullishString,
+        link: nullishString,
+        source: nullishString,
       }),
     )
-    .optional(),
-  first_response_seconds: z.number().optional(),
-  first_response_time: z.string().optional(),
-  id: z.string().optional(),
-  latest_message_time: z.string().optional(),
-  link: z.string().optional(),
-  number: z.number().optional(),
-  number_of_touches: z.number().optional(),
-  requester: userReferenceSchema.optional(),
-  resolution_breach_time: z.string().optional(),
-  resolution_seconds: z.number().optional(),
-  resolution_time: z.string().optional(),
+    .nullish(),
+  first_response_breach_time: nullishString,
+  first_response_seconds: nullishInteger,
+  first_response_time: nullishString,
+  id: nullishString,
+  latest_message_time: nullishString,
+  link: nullishString,
+  number: nullishInteger,
+  number_of_touches: nullishInteger,
+  parent_issue_group: issueReferenceSchema.nullish(),
+  requester: contactReferenceSchema.nullish(),
+  resolution_breach_time: nullishString,
+  resolution_seconds: nullishInteger,
+  resolution_time: nullishString,
   slack: passthroughObject({
-    channel_id: z.string().optional(),
-    message_ts: z.string().optional(),
-    workspace_id: z.string().optional(),
-  }).optional(),
-  snoozed_until_time: z.string().optional(),
-  source: z.string().optional(),
-  state: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  team: passthroughObject({
-    id: z.string().optional(),
-  }).optional(),
-  time_in_status_seconds: secondsByStatusSchema.optional(),
-  title: z.string().optional(),
-  type: z.string().optional(),
-  updated_at: z.string().optional(),
+    channel_id: nullishString,
+    message_ts: nullishString,
+    workspace_id: nullishString,
+  }).nullish(),
+  snoozed_until_time: nullishString,
+  source: nullishString,
+  state: nullishString,
+  tags: nullishStringArray,
+  team: teamReferenceSchema.nullish(),
+  time_in_status_seconds: secondsByStatusSchema.nullish(),
+  title: nullishString,
+  type: nullishString,
+  updated_at: nullishString,
 });
 
 export const issueFollowerSchema = passthroughObject({
-  id: z.string().optional(),
-  type: z.string().optional(),
+  id: nullishString,
+  type: nullishString,
 });
 
 export const userSchema = passthroughObject({
-  avatar_url: z.string().optional(),
-  email: z.string().optional(),
-  emails: z.array(z.string()).optional(),
-  id: z.string().optional(),
-  name: z.string().optional(),
-  role_id: z.string().optional(),
-  status: z.string().optional(),
+  avatar_url: nullishString,
+  email: nullishString,
+  emails: nullishStringArray,
+  id: nullishString,
+  name: nullishString,
+  role_id: nullishString,
+  status: nullishString,
 });
 
 export const teamSchema = passthroughObject({
-  id: z.string().optional(),
-  name: z.string().optional(),
-  users: z.array(userReferenceSchema).optional(),
+  id: nullishString,
+  name: nullishString,
+  users: nullishArray(userReferenceSchema),
 });
 
 export const meSchema = passthroughObject({
-  id: z.string().optional(),
-  name: z.string().optional(),
+  id: nullishString,
+  name: nullishString,
 });
 
 export const accountResponseSchema = apiResponseSchema(accountSchema);
@@ -290,6 +323,7 @@ export type IssuePage = z.infer<typeof issuePageSchema>;
 export type IssueResponse = z.infer<typeof issueResponseSchema>;
 export type MeResponse = z.infer<typeof meResponseSchema>;
 export type SearchParams = z.input<typeof searchParamsSchema>;
+export type TextSearchParams = z.input<typeof textSearchParamsSchema>;
 export type TeamListResponse = z.infer<typeof teamListResponseSchema>;
 export type TeamResponse = z.infer<typeof teamResponseSchema>;
 export type UserListResponse = z.infer<typeof userListResponseSchema>;

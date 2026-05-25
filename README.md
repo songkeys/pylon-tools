@@ -318,6 +318,16 @@ const client = createPylonClient({ apiKey: process.env.PYLON_API_KEY! });
 const issue = await client.issues.retrieve("123");
 ```
 
+Account, contact, and issue search support Pylon's fuzzy `search_text` alongside structured filters:
+
+```ts
+const openIssues = await client.issues.search({
+  filter: { field: "state", operator: "not_in", values: ["closed"] },
+  limit: 50,
+  search_text: "billing",
+});
+```
+
 For endpoints without a dedicated convenience method, use `requestEndpoint`:
 
 ```ts

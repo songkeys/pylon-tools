@@ -2,7 +2,12 @@ import { tool } from "ai";
 import { z } from "zod";
 import { createPylonClient } from "../client";
 import { summarizePage } from "../pagination";
-import { cursorSchema, limitSchema, searchParamsSchema, type SearchFilter } from "../schemas";
+import {
+  cursorSchema,
+  limitSchema,
+  textSearchParamsSchema,
+  type TextSearchParams,
+} from "../schemas";
 
 async function listContactsStep({ apiKey }: { apiKey: string }) {
   "use step";
@@ -53,15 +58,22 @@ async function searchContactsStep({
   cursor,
   filter,
   limit,
+  search_text,
 }: {
   apiKey: string;
   cursor?: string | undefined;
-  filter: SearchFilter;
+  filter: TextSearchParams["filter"];
   limit: number;
+  search_text?: string | undefined;
 }) {
   "use step";
   const client = createPylonClient(apiKey);
-  const params = cursor === undefined ? { filter, limit } : { cursor, filter, limit };
+  const params = {
+    filter,
+    limit,
+    ...(cursor === undefined ? {} : { cursor }),
+    ...(search_text === undefined ? {} : { search_text }),
+  };
 
   return summarizePage(client.contacts.search(params));
 }
@@ -70,6 +82,6 @@ export const searchContacts = (apiKey: string) =>
   tool({
     description:
       "Search Pylon contacts by filter. Useful for finding customers by email, name, account, or custom fields.",
-    inputSchema: searchParamsSchema,
+    inputSchema: textSearchParamsSchema,
     execute: async (args) => searchContactsStep({ apiKey, ...args }),
   });

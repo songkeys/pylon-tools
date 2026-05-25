@@ -276,7 +276,12 @@ function resolveApproval(name: PylonWriteToolName, config: ApprovalConfig = true
 
 export type PylonTools = PylonToolMap;
 
-export { PylonApiError, PylonClient, createPylonClient } from "./client";
+export {
+  PylonApiError,
+  PylonClient,
+  PylonResponseValidationError,
+  createPylonClient,
+} from "./client";
 export type { PylonClientOptions, PylonHttpMethod } from "./client";
 export { createPylonAgent } from "./agents";
 export type { CreatePylonAgentOptions } from "./agents";
@@ -298,6 +303,7 @@ export type {
   SearchParams,
   TeamListResponse,
   TeamResponse,
+  TextSearchParams,
   UserListResponse,
   UserPage,
   UserResponse,

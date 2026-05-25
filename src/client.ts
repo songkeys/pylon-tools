@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { ZodError, type z } from "zod";
 import {
   accountListParamsSchema,
   accountPageSchema,
@@ -16,6 +16,7 @@ import {
   searchParamsSchema,
   teamListResponseSchema,
   teamResponseSchema,
+  textSearchParamsSchema,
   userListResponseSchema,
   userPageSchema,
   userResponseSchema,
@@ -23,6 +24,7 @@ import {
   type ContactRetrieveParams,
   type IssueListParams,
   type SearchParams,
+  type TextSearchParams,
 } from "./schemas";
 
 const DEFAULT_BASE_URL = "https://api.usepylon.com";
@@ -73,6 +75,40 @@ export class PylonApiError extends Error {
   }
 }
 
+export class PylonResponseValidationError extends Error {
+  readonly body: unknown;
+  readonly issues: z.ZodIssue[];
+  readonly method: PylonHttpMethod;
+  readonly path: string;
+  readonly requestId?: string | undefined;
+
+  constructor({
+    body,
+    issues,
+    method,
+    path,
+    requestId,
+  }: {
+    body: unknown;
+    issues: z.ZodIssue[];
+    method: PylonHttpMethod;
+    path: string;
+    requestId?: string | undefined;
+  }) {
+    const summary = summarizeZodIssues(issues);
+    const requestSuffix = requestId ? ` (request_id: ${requestId})` : "";
+
+    super(`Pylon ${method} ${path} response failed validation${requestSuffix}: ${summary}`);
+
+    this.name = "PylonResponseValidationError";
+    this.body = body;
+    this.issues = issues;
+    this.method = method;
+    this.path = path;
+    this.requestId = requestId;
+  }
+}
+
 export class PylonClient {
   readonly accounts = {
     list: (query: AccountListParams = {}) =>
@@ -81,9 +117,9 @@ export class PylonClient {
       }),
     retrieve: (id: string) =>
       this.request("GET", `/accounts/${pathSegment(id)}`, accountResponseSchema),
-    search: (body: SearchParams) =>
+    search: (body: TextSearchParams) =>
       this.request("POST", "/accounts/search", accountPageSchema, {
-        body: searchParamsSchema.parse(body),
+        body: textSearchParamsSchema.parse(body),
       }),
   };
 
@@ -93,9 +129,9 @@ export class PylonClient {
       this.request("GET", `/contacts/${pathSegment(id)}`, contactResponseSchema, {
         query: contactRetrieveParamsSchema.parse(query),
       }),
-    search: (body: SearchParams) =>
+    search: (body: TextSearchParams) =>
       this.request("POST", "/contacts/search", contactPageSchema, {
-        body: searchParamsSchema.parse(body),
+        body: textSearchParamsSchema.parse(body),
       }),
   };
 
@@ -108,9 +144,9 @@ export class PylonClient {
       this.request("GET", `/issues/${pathSegment(id)}/followers`, issueFollowersResponseSchema),
     retrieve: (id: string) =>
       this.request("GET", `/issues/${pathSegment(id)}`, issueResponseSchema),
-    search: (body: SearchParams) =>
+    search: (body: TextSearchParams) =>
       this.request("POST", "/issues/search", issuePageSchema, {
-        body: searchParamsSchema.parse(body),
+        body: textSearchParamsSchema.parse(body),
       }),
   };
 
@@ -191,7 +227,15 @@ export class PylonClient {
       throw createPylonApiError(response, payload);
     }
 
-    return schema.parse(payload);
+    try {
+      return schema.parse(payload);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw createPylonResponseValidationError(method, path, payload, error);
+      }
+
+      throw error;
+    }
   }
 
   private buildURL(path: string, query?: Record<string, unknown> | undefined): string {
@@ -256,7 +300,7 @@ async function readResponsePayload(response: Response): Promise<unknown> {
 function createPylonApiError(response: Response, payload: unknown): PylonApiError {
   const parsed = errorResponseSchema.safeParse(payload);
   const errors = parsed.success ? (parsed.data.errors ?? []) : [];
-  const requestId = parsed.success ? parsed.data.request_id : undefined;
+  const requestId = parsed.success ? (parsed.data.request_id ?? undefined) : undefined;
 
   return new PylonApiError({
     body: payload,
@@ -265,6 +309,59 @@ function createPylonApiError(response: Response, payload: unknown): PylonApiErro
     status: response.status,
     statusText: response.statusText,
   });
+}
+
+function createPylonResponseValidationError(
+  method: PylonHttpMethod,
+  path: string,
+  payload: unknown,
+  error: ZodError,
+): PylonResponseValidationError {
+  return new PylonResponseValidationError({
+    body: payload,
+    issues: error.issues,
+    method,
+    path,
+    requestId: requestIdFromPayload(payload),
+  });
+}
+
+function requestIdFromPayload(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return undefined;
+
+  const requestId = (payload as { request_id?: unknown }).request_id;
+  return typeof requestId === "string" ? requestId : undefined;
+}
+
+function summarizeZodIssues(issues: z.ZodIssue[]): string {
+  if (issues.length === 0) return "unknown schema mismatch";
+
+  const shownIssues = issues.slice(0, 5).map((issue) => {
+    const path = formatZodPath(issue.path);
+    return `${path}: ${issue.message}`;
+  });
+  const remainingCount = issues.length - shownIssues.length;
+  const remaining = remainingCount > 0 ? `; ${remainingCount} more` : "";
+
+  return `${shownIssues.join("; ")}${remaining}`;
+}
+
+function formatZodPath(path: PropertyKey[]): string {
+  if (path.length === 0) return "(root)";
+
+  let formatted = "";
+
+  for (const part of path) {
+    if (typeof part === "number") {
+      formatted += `[${part}]`;
+      continue;
+    }
+
+    const key = String(part);
+    formatted = formatted ? `${formatted}.${key}` : key;
+  }
+
+  return formatted;
 }
 
 function pathSegment(value: string): string {

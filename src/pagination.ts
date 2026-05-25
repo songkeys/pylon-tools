@@ -8,14 +8,15 @@ export type PageSummary<T> = {
 };
 
 type PylonPage<T> = {
-  data?: T[] | undefined;
+  data?: T[] | null | undefined;
   pagination?:
     | {
-        cursor?: string | undefined;
-        has_next_page?: boolean | undefined;
+        cursor?: string | null | undefined;
+        has_next_page?: boolean | null | undefined;
       }
+    | null
     | undefined;
-  request_id?: string | undefined;
+  request_id?: string | null | undefined;
 };
 
 export async function summarizePage<T>(
@@ -41,11 +42,11 @@ export async function summarizePage<T>(
 function cleanPagination(pagination: NonNullable<PylonPage<unknown>["pagination"]>) {
   const cleaned: NonNullable<PageSummary<unknown>["pagination"]> = {};
 
-  if (pagination.cursor !== undefined) {
+  if (pagination.cursor != null) {
     cleaned.cursor = pagination.cursor;
   }
 
-  if (pagination.has_next_page !== undefined) {
+  if (pagination.has_next_page != null) {
     cleaned.hasNextPage = pagination.has_next_page;
   }
 

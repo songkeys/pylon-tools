@@ -2,7 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { createPylonClient } from "../client";
 import { summarizePage } from "../pagination";
-import { searchParamsSchema, type SearchFilter } from "../schemas";
+import { textSearchParamsSchema, type TextSearchParams } from "../schemas";
 
 async function getIssueStep({ apiKey, id }: { apiKey: string; id: string }) {
   "use step";
@@ -71,15 +71,22 @@ async function searchIssuesStep({
   cursor,
   filter,
   limit,
+  search_text,
 }: {
   apiKey: string;
   cursor?: string | undefined;
-  filter: SearchFilter;
+  filter: TextSearchParams["filter"];
   limit: number;
+  search_text?: string | undefined;
 }) {
   "use step";
   const client = createPylonClient(apiKey);
-  const params = cursor === undefined ? { filter, limit } : { cursor, filter, limit };
+  const params = {
+    filter,
+    limit,
+    ...(cursor === undefined ? {} : { cursor }),
+    ...(search_text === undefined ? {} : { search_text }),
+  };
 
   return summarizePage(client.issues.search(params));
 }
@@ -88,6 +95,6 @@ export const searchIssues = (apiKey: string) =>
   tool({
     description:
       "Search Pylon issues by filter. Useful for finding support cases by state, account, requester, tag, source, team, or custom fields.",
-    inputSchema: searchParamsSchema,
+    inputSchema: textSearchParamsSchema,
     execute: async (args) => searchIssuesStep({ apiKey, ...args }),
   });
