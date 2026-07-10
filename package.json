@@ -47,6 +47,7 @@
     "lint:fix": "oxlint . --fix",
     "prepack": "pnpm build",
     "release": "bumpp",
+    "test": "pnpm build && node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

@@ -106,29 +106,62 @@ const result = streamText({
 });
 ```
 
-Pass `false` to automatically approve every mutation, or use a typed map for granular policy:
+Use AI SDK 7 approval statuses for granular policy. Unlisted mutation tools remain `"user-approval"` so a partial policy fails safely:
 
 ```ts
 const toolApproval = createPylonToolApproval({
-  createIssueReply: false,
-  createIssueNote: false,
-  deleteIssue: true,
-  redactIssueMessage: true,
+  createIssueReply: "not-applicable",
+  createIssueNote: "approved",
+  deleteIssue: "user-approval",
+  redactIssueMessage: {
+    type: "denied",
+    reason: "Message redaction is disabled in this environment.",
+  },
 });
 
-// Automatically approve every Pylon mutation tool
-const noApprovalPrompts = createPylonToolApproval(false);
+// Execute every mutation normally without an approval flow
+const noApprovalFlow = createPylonToolApproval("not-applicable");
 ```
 
-Use `ApprovalConfig` for a reusable typed configuration:
+The statuses have distinct behavior:
+
+| Status           | Behavior                                                    |
+| ---------------- | ----------------------------------------------------------- |
+| `not-applicable` | Execute normally without approval request/response metadata |
+| `user-approval`  | Emit an approval request and wait for the user's decision   |
+| `approved`       | Record an automatic approval request/response, then execute |
+| `denied`         | Record an automatic denial and do not execute               |
+
+Use `"not-applicable"`—not `"approved"`—when a tool should simply run without an approval flow. Boolean values remain available as shorthand: `true` maps to `"user-approval"` and `false` maps to `"not-applicable"`.
+
+Use `PylonToolApprovalConfig` for a reusable typed policy:
 
 ```ts
-import type { ApprovalConfig } from "pylon-tools";
+import type { PylonToolApprovalConfig } from "pylon-tools";
 
-const requireApproval = {
-  deleteAccount: true,
-  updateAccount: false,
-} satisfies ApprovalConfig;
+const approvalPolicy = {
+  deleteAccount: "user-approval",
+  updateAccount: "not-applicable",
+} satisfies PylonToolApprovalConfig;
+```
+
+### Approval best practices
+
+- Keep policy beside `streamText`, `generateText`, or `ToolLoopAgent`; tools should describe capabilities, not decide who may execute them.
+- Default mutation tools to `"user-approval"` and leave read-only tools outside the policy.
+- Use `"not-applicable"` for trusted operations that should execute normally. Reserve `"approved"` for cases where an explicit automatic approval record is useful for UI or auditing.
+- Use `"denied"` with a reason when an operation is prohibited by environment or product policy.
+- Re-evaluate approval from trusted server-side context on every call. Do not trust a client-supplied tool name or policy.
+- For approval responses that round-trip through an untrusted client, set `experimental_toolApprovalSecret` so AI SDK 7 verifies the HMAC signature before execution.
+
+```ts
+const result = streamText({
+  model,
+  tools,
+  toolApproval: createPylonToolApproval(approvalPolicy),
+  experimental_toolApprovalSecret: process.env.TOOL_APPROVAL_SECRET,
+  prompt,
+});
 ```
 
 ## Cherry-Picking Tools
@@ -176,7 +209,10 @@ const agent = createPylonAgent({
   model: "anthropic/claude-sonnet-4.6",
   apiKey: process.env.PYLON_API_KEY,
   preset: "support",
-  requireApproval: true,
+  toolApproval: {
+    createIssueReply: "not-applicable",
+    deleteIssue: "user-approval",
+  },
 });
 
 const result = await agent.generate({
@@ -296,12 +332,19 @@ type PylonToolPreset =
 
 ### `createPylonToolApproval(config?)`
 
-Returns an AI SDK 7 `toolApproval` object for Pylon mutation tools. By default, every mutation requires user approval. Pass `false` to automatically approve mutations or a partial `PylonWriteToolName` map to configure individual tools.
+Returns an AI SDK 7 `toolApproval` object for Pylon mutation tools. By default, every mutation requires user approval. Pass a global status or a partial `PylonWriteToolName` map to configure individual tools. Unlisted mutations continue to require user approval.
+
+```ts
+type PylonToolApprovalConfig =
+  | boolean
+  | Exclude<ToolApprovalStatus, undefined>
+  | Partial<Record<PylonWriteToolName, boolean | Exclude<ToolApprovalStatus, undefined>>>;
+```
 
 ```ts
 const toolApproval = createPylonToolApproval({
-  createIssueReply: false,
-  deleteIssue: true,
+  createIssueReply: "not-applicable",
+  deleteIssue: "user-approval",
 });
 ```
 
@@ -316,7 +359,7 @@ const agent = createPylonAgent({
   model: "anthropic/claude-sonnet-4.6",
   apiKey: process.env.PYLON_API_KEY,
   preset: "support",
-  requireApproval: true,
+  toolApproval: "user-approval",
   additionalInstructions: "Focus on enterprise escalations.",
 });
 ```
@@ -326,7 +369,7 @@ const agent = createPylonAgent({
 | `model`                  | Language model string or provider instance             |
 | `apiKey`                 | Pylon API key, defaults to `process.env.PYLON_API_KEY` |
 | `preset`                 | Optional preset or array of presets to scope tools     |
-| `requireApproval`        | Approval config applied through AI SDK `toolApproval`  |
+| `toolApproval`           | AI SDK 7 approval policy for Pylon mutation tools      |
 | `instructions`           | Replaces the built-in instructions entirely            |
 | `additionalInstructions` | Appended to the built-in instructions                  |
 
@@ -369,6 +412,7 @@ pnpm typecheck
 pnpm lint
 pnpm fmt:check
 pnpm build
+pnpm test
 ```
 
 ## Release

@@ -36,8 +36,14 @@ const ALL_TOOL_NAMES = [
 
 export type PylonToolName = (typeof ALL_TOOL_NAMES)[number];
 export type PylonWriteToolName = WriteEndpointToolName;
-export type ApprovalConfig = boolean | Partial<Record<PylonWriteToolName, boolean>>;
-export type PylonToolApproval = Record<PylonWriteToolName, ToolApprovalStatus>;
+export type PylonToolApprovalStatus = Exclude<ToolApprovalStatus, undefined>;
+export type PylonToolApprovalValue = boolean | PylonToolApprovalStatus;
+export type PylonToolApprovalConfig =
+  | PylonToolApprovalValue
+  | Partial<Record<PylonWriteToolName, PylonToolApprovalValue>>;
+/** @deprecated Use `PylonToolApprovalConfig` instead. */
+export type ApprovalConfig = PylonToolApprovalConfig;
+export type PylonToolApproval = Record<PylonWriteToolName, PylonToolApprovalStatus>;
 export type PylonToolPreset =
   | "accounts"
   | "admin"
@@ -275,18 +281,29 @@ export function createPylonTools({ apiKey, overrides, preset }: PylonToolsOption
   ) as Partial<typeof allTools>;
 }
 
-export function createPylonToolApproval(config: ApprovalConfig = true): PylonToolApproval {
+export function createPylonToolApproval(
+  config: PylonToolApprovalConfig = "user-approval",
+): PylonToolApproval {
   return Object.fromEntries(
-    WRITE_ENDPOINT_TOOL_NAMES.map((name) => [
-      name,
-      resolveApproval(name, config) ? "user-approval" : "approved",
-    ]),
+    WRITE_ENDPOINT_TOOL_NAMES.map((name) => [name, resolveApprovalStatus(name, config)]),
   ) as PylonToolApproval;
 }
 
-function resolveApproval(name: PylonWriteToolName, config: ApprovalConfig): boolean {
-  if (typeof config === "boolean") return config;
-  return config[name] ?? true;
+function resolveApprovalStatus(
+  name: PylonWriteToolName,
+  config: PylonToolApprovalConfig,
+): PylonToolApprovalStatus {
+  const value = isApprovalValue(config) ? config : (config[name] ?? "user-approval");
+
+  if (typeof value === "boolean") {
+    return value ? "user-approval" : "not-applicable";
+  }
+
+  return value;
+}
+
+function isApprovalValue(config: PylonToolApprovalConfig): config is PylonToolApprovalValue {
+  return typeof config !== "object" || "type" in config;
 }
 
 export type PylonTools = PylonToolMap;

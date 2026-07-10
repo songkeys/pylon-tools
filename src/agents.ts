@@ -2,8 +2,8 @@ import { ToolLoopAgent, type ToolLoopAgentSettings } from "ai";
 import {
   createPylonToolApproval,
   createPylonTools,
-  type ApprovalConfig,
   type PylonToolPreset,
+  type PylonToolApprovalConfig,
   type PylonToolsOptions,
 } from "./index";
 
@@ -54,7 +54,13 @@ export type CreatePylonAgentOptions = AgentOptions & {
    */
   apiKey?: string;
   preset?: PylonToolPreset | PylonToolPreset[];
-  requireApproval?: ApprovalConfig;
+  /**
+   * AI SDK 7 approval policy for Pylon mutation tools.
+   * Defaults to `"user-approval"` for every mutation tool.
+   */
+  toolApproval?: PylonToolApprovalConfig;
+  /** @deprecated Use `toolApproval` instead. */
+  requireApproval?: PylonToolApprovalConfig;
   instructions?: string;
   additionalInstructions?: string;
 };
@@ -62,6 +68,7 @@ export type CreatePylonAgentOptions = AgentOptions & {
 export function createPylonAgent({
   apiKey,
   preset,
+  toolApproval,
   requireApproval,
   instructions,
   additionalInstructions,
@@ -74,7 +81,7 @@ export function createPylonAgent({
   return new ToolLoopAgent({
     ...agentOptions,
     tools: createPylonTools(toolsOptions),
-    toolApproval: createPylonToolApproval(requireApproval),
+    toolApproval: createPylonToolApproval(toolApproval ?? requireApproval),
     instructions: resolveInstructions({ additionalInstructions, instructions, preset }),
   });
 }
