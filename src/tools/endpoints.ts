@@ -3,12 +3,10 @@ import { z } from "zod";
 import { createPylonClient } from "../client";
 import {
   ENDPOINT_DEFINITIONS,
-  WRITE_ENDPOINT_TOOL_NAMES,
   type EndpointDefinition,
   type EndpointToolName,
   type FieldDefinition,
   type FieldKind,
-  type WriteEndpointToolName,
 } from "../endpoint-definitions";
 import { sanitizeToolOverrides } from "../tool-overrides";
 import type { ToolOverrides } from "../types";
@@ -34,7 +32,6 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   ]),
 );
 const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
-const WRITE_TOOL_NAME_SET = new Set<string>(WRITE_ENDPOINT_TOOL_NAMES);
 const fileSchema = z.any().describe("Fetch-compatible Blob or File value for multipart upload");
 
 type EndpointInput = Record<string, unknown>;
@@ -68,17 +65,9 @@ async function executeEndpointStep({
   return client.requestEndpoint(definition.method, path, options);
 }
 
-export function createPylonEndpointTools(
-  apiKey: string,
-  approvalFor?: ((name: WriteEndpointToolName) => ToolOverrides) | undefined,
-): PylonEndpointTools {
+export function createPylonEndpointTools(apiKey: string): PylonEndpointTools {
   const entries = ENDPOINT_DEFINITIONS.map((definition) => {
-    const approval =
-      approvalFor && isWriteEndpointToolName(definition.name)
-        ? approvalFor(definition.name)
-        : undefined;
-
-    return [definition.name, createPylonEndpointTool(apiKey, definition.name, approval)] as const;
+    return [definition.name, createPylonEndpointTool(apiKey, definition.name)] as const;
   });
 
   return Object.fromEntries(entries) as PylonEndpointTools;
@@ -88,7 +77,7 @@ export function createPylonEndpointTool(
   apiKey: string,
   name: EndpointToolName,
   options: ToolOverrides = {},
-) {
+): Tool<EndpointInput, unknown> {
   const definition = ENDPOINT_DEFINITIONS.find((endpoint) => endpoint.name === name);
 
   if (!definition) {
@@ -97,10 +86,6 @@ export function createPylonEndpointTool(
 
   const safeOptions = sanitizeToolOverrides(options);
 
-  if (isWriteEndpointToolName(name) && safeOptions.needsApproval === undefined) {
-    safeOptions.needsApproval = true;
-  }
-
   return createEndpointTool(apiKey, definition, safeOptions);
 }
 
@@ -108,7 +93,7 @@ function createEndpointTool(
   apiKey: string,
   definition: EndpointDefinition,
   options: ToolOverrides = {},
-) {
+): Tool<EndpointInput, unknown> {
   return tool({
     description: describeEndpoint(definition),
     inputSchema: inputSchemaFor(definition),
@@ -230,10 +215,6 @@ function describeEndpoint(definition: EndpointDefinition): string {
   const fieldSummary = fields.length ? ` Inputs: ${fields.join(", ")}.` : "";
 
   return `${definition.summary}. Calls ${definition.method} ${definition.path}.${fieldSummary}`;
-}
-
-function isWriteEndpointToolName(name: string): name is WriteEndpointToolName {
-  return WRITE_TOOL_NAME_SET.has(name);
 }
 
 function isBlob(value: unknown): value is Blob {

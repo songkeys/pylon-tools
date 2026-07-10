@@ -1,13 +1,18 @@
-import { tool } from "ai";
+import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { createPylonClient } from "../client";
-import { summarizePage } from "../pagination";
+import { summarizePage, type PageSummary } from "../pagination";
 import {
-  cursorSchema,
-  limitSchema,
+  accountListParamsSchema,
   textSearchParamsSchema,
+  type Account,
+  type AccountResponse,
   type TextSearchParams,
 } from "../schemas";
+
+const getAccountInputSchema = z.object({
+  id: z.string().describe("Pylon account ID or external ID"),
+});
 
 async function getAccountStep({ apiKey, id }: { apiKey: string; id: string }) {
   "use step";
@@ -15,13 +20,13 @@ async function getAccountStep({ apiKey, id }: { apiKey: string; id: string }) {
   return client.accounts.retrieve(id);
 }
 
-export const getAccount = (apiKey: string) =>
+export const getAccount = (
+  apiKey: string,
+): Tool<z.infer<typeof getAccountInputSchema>, AccountResponse> =>
   tool({
     description:
       "Get a Pylon account by its ID or external ID, including domains, tags, owner, and custom fields.",
-    inputSchema: z.object({
-      id: z.string().describe("Pylon account ID or external ID"),
-    }),
+    inputSchema: getAccountInputSchema,
     execute: async (args) => getAccountStep({ apiKey, ...args }),
   });
 
@@ -41,14 +46,13 @@ async function listAccountsStep({
   return summarizePage(client.accounts.list(params));
 }
 
-export const listAccounts = (apiKey: string) =>
+export const listAccounts = (
+  apiKey: string,
+): Tool<z.infer<typeof accountListParamsSchema>, PageSummary<Account>> =>
   tool({
     description:
       "List Pylon accounts with pagination. Use this when browsing accounts without a precise search filter.",
-    inputSchema: z.object({
-      cursor: cursorSchema,
-      limit: limitSchema,
-    }),
+    inputSchema: accountListParamsSchema,
     execute: async (args) => listAccountsStep({ apiKey, ...args }),
   });
 
@@ -77,7 +81,9 @@ async function searchAccountsStep({
   return summarizePage(client.accounts.search(params));
 }
 
-export const searchAccounts = (apiKey: string) =>
+export const searchAccounts = (
+  apiKey: string,
+): Tool<z.infer<typeof textSearchParamsSchema>, PageSummary<Account>> =>
   tool({
     description:
       "Search Pylon accounts by filter. Useful for finding customer accounts by domain, name, tags, or custom fields.",

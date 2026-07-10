@@ -1,3 +1,4 @@
+import type { ToolApprovalStatus } from "ai";
 import { getAccount, listAccounts, searchAccounts } from "./tools/accounts";
 import { getContact, listContacts, searchContacts } from "./tools/contacts";
 import { getIssue, listIssueFollowers, listIssues, searchIssues } from "./tools/issues";
@@ -8,11 +9,12 @@ import { resolvePylonApiKey } from "./client";
 import {
   ENDPOINT_DEFINITIONS,
   ENDPOINT_TOOL_NAMES,
+  WRITE_ENDPOINT_TOOL_NAMES,
   type EndpointToolName,
   type WriteEndpointToolName,
 } from "./endpoint-definitions";
 import { sanitizeToolOverrides } from "./tool-overrides";
-import { createPylonEndpointTools } from "./tools/endpoints";
+import { createPylonEndpointTools, type PylonEndpointTools } from "./tools/endpoints";
 import type { ToolOverrides } from "./types";
 
 const ISSUE_TOOLS = ["getIssue", "listIssues", "searchIssues", "listIssueFollowers"] as const;
@@ -35,6 +37,7 @@ const ALL_TOOL_NAMES = [
 export type PylonToolName = (typeof ALL_TOOL_NAMES)[number];
 export type PylonWriteToolName = WriteEndpointToolName;
 export type ApprovalConfig = boolean | Partial<Record<PylonWriteToolName, boolean>>;
+export type PylonToolApproval = Record<PylonWriteToolName, ToolApprovalStatus>;
 export type PylonToolPreset =
   | "accounts"
   | "admin"
@@ -130,7 +133,24 @@ const PRESET_TOOLS = {
   ],
 } as const satisfies Record<PylonToolPreset, readonly PylonToolName[]>;
 
-type PylonToolMap = ReturnType<typeof createAllPylonTools>;
+type PylonToolMap = {
+  getAccount: ReturnType<typeof getAccount>;
+  getContact: ReturnType<typeof getContact>;
+  getIssue: ReturnType<typeof getIssue>;
+  getMe: ReturnType<typeof getMe>;
+  getTeam: ReturnType<typeof getTeam>;
+  getUser: ReturnType<typeof getUser>;
+  listAccounts: ReturnType<typeof listAccounts>;
+  listContacts: ReturnType<typeof listContacts>;
+  listIssueFollowers: ReturnType<typeof listIssueFollowers>;
+  listIssues: ReturnType<typeof listIssues>;
+  listTeams: ReturnType<typeof listTeams>;
+  listUsers: ReturnType<typeof listUsers>;
+  searchAccounts: ReturnType<typeof searchAccounts>;
+  searchContacts: ReturnType<typeof searchContacts>;
+  searchIssues: ReturnType<typeof searchIssues>;
+  searchUsers: ReturnType<typeof searchUsers>;
+} & PylonEndpointTools;
 type ReadEndpointToolName = Extract<
   (typeof ENDPOINT_DEFINITIONS)[number],
   { readonly mutates: false }
@@ -171,13 +191,8 @@ export type PylonToolsOptions = {
    */
   apiKey?: string;
   /**
-   * Whether mutation tools require user approval.
-   * Defaults to `true`. Read-only tools never require approval.
-   */
-  requireApproval?: ApprovalConfig;
-  /**
    * Per-tool overrides for customizing metadata such as description, title,
-   * needsApproval, and providerOptions. `execute`, `inputSchema`, and
+   * providerOptions, and input callbacks. `execute`, `inputSchema`, and
    * `outputSchema` cannot be overridden.
    */
   overrides?: Partial<Record<PylonToolName, ToolOverrides>>;
@@ -188,10 +203,7 @@ export type PylonToolsOptions = {
   preset?: PylonToolPreset | PylonToolPreset[];
 };
 
-function createAllPylonTools(
-  resolvedApiKey: string,
-  approvalFor: (name: PylonWriteToolName) => ToolOverrides,
-) {
+function createAllPylonTools(resolvedApiKey: string): PylonToolMap {
   return {
     getAccount: getAccount(resolvedApiKey),
     getContact: getContact(resolvedApiKey),
@@ -209,7 +221,7 @@ function createAllPylonTools(
     searchContacts: searchContacts(resolvedApiKey),
     searchIssues: searchIssues(resolvedApiKey),
     searchUsers: searchUsers(resolvedApiKey),
-    ...createPylonEndpointTools(resolvedApiKey, approvalFor),
+    ...createPylonEndpointTools(resolvedApiKey),
   };
 }
 
@@ -238,18 +250,12 @@ export function createPylonTools<Preset extends Exclude<PylonToolPreset, "all">>
 export function createPylonTools<const Presets extends readonly PylonToolPreset[]>(
   options: Omit<PylonToolsOptions, "preset"> & { preset: Presets },
 ): PylonPresetArrayTools<Presets>;
-export function createPylonTools({
-  apiKey,
-  overrides,
-  preset,
-  requireApproval = true,
-}: PylonToolsOptions = {}): PylonToolMap | Partial<PylonToolMap> {
+export function createPylonTools({ apiKey, overrides, preset }: PylonToolsOptions = {}):
+  | PylonToolMap
+  | Partial<PylonToolMap> {
   const resolvedApiKey = resolvePylonApiKey(apiKey);
   const allowed = resolvePresetTools(preset);
-  const approval = (name: PylonWriteToolName) => ({
-    needsApproval: resolveApproval(name, requireApproval),
-  });
-  const allTools = createAllPylonTools(resolvedApiKey, approval);
+  const allTools = createAllPylonTools(resolvedApiKey);
 
   if (overrides) {
     for (const [name, toolOverrides] of Object.entries(overrides)) {
@@ -269,7 +275,16 @@ export function createPylonTools({
   ) as Partial<typeof allTools>;
 }
 
-function resolveApproval(name: PylonWriteToolName, config: ApprovalConfig = true): boolean {
+export function createPylonToolApproval(config: ApprovalConfig = true): PylonToolApproval {
+  return Object.fromEntries(
+    WRITE_ENDPOINT_TOOL_NAMES.map((name) => [
+      name,
+      resolveApproval(name, config) ? "user-approval" : "approved",
+    ]),
+  ) as PylonToolApproval;
+}
+
+function resolveApproval(name: PylonWriteToolName, config: ApprovalConfig): boolean {
   if (typeof config === "boolean") return config;
   return config[name] ?? true;
 }

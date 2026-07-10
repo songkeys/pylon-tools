@@ -1,8 +1,22 @@
-import { tool } from "ai";
+import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { createPylonClient } from "../client";
-import { summarizePage } from "../pagination";
-import { textSearchParamsSchema, type TextSearchParams } from "../schemas";
+import { summarizePage, type PageSummary } from "../pagination";
+import {
+  textSearchParamsSchema,
+  type Issue,
+  type IssueFollowersResponse,
+  type IssueResponse,
+  type TextSearchParams,
+} from "../schemas";
+
+const getIssueInputSchema = z.object({
+  id: z.string().describe("Pylon issue ID or issue number"),
+});
+const listIssuesInputSchema = z.object({
+  endTime: z.string().describe("End of the issue creation window as an RFC3339 timestamp"),
+  startTime: z.string().describe("Start of the issue creation window as an RFC3339 timestamp"),
+});
 
 async function getIssueStep({ apiKey, id }: { apiKey: string; id: string }) {
   "use step";
@@ -10,13 +24,13 @@ async function getIssueStep({ apiKey, id }: { apiKey: string; id: string }) {
   return client.issues.retrieve(id);
 }
 
-export const getIssue = (apiKey: string) =>
+export const getIssue = (
+  apiKey: string,
+): Tool<z.infer<typeof getIssueInputSchema>, IssueResponse> =>
   tool({
     description:
       "Get a Pylon issue by its ID or number, including title, state, source, requester, account, tags, and timing metadata.",
-    inputSchema: z.object({
-      id: z.string().describe("Pylon issue ID or issue number"),
-    }),
+    inputSchema: getIssueInputSchema,
     execute: async (args) => getIssueStep({ apiKey, ...args }),
   });
 
@@ -40,14 +54,13 @@ async function listIssuesStep({
   );
 }
 
-export const listIssues = (apiKey: string) =>
+export const listIssues = (
+  apiKey: string,
+): Tool<z.infer<typeof listIssuesInputSchema>, PageSummary<Issue>> =>
   tool({
     description:
       "List Pylon issues in a time window. The start and end time must be RFC3339 timestamps no more than 30 days apart.",
-    inputSchema: z.object({
-      endTime: z.string().describe("End of the issue creation window as an RFC3339 timestamp"),
-      startTime: z.string().describe("Start of the issue creation window as an RFC3339 timestamp"),
-    }),
+    inputSchema: listIssuesInputSchema,
     execute: async (args) => listIssuesStep({ apiKey, ...args }),
   });
 
@@ -57,12 +70,12 @@ async function listIssueFollowersStep({ apiKey, id }: { apiKey: string; id: stri
   return client.issues.listFollowers(id);
 }
 
-export const listIssueFollowers = (apiKey: string) =>
+export const listIssueFollowers = (
+  apiKey: string,
+): Tool<z.infer<typeof getIssueInputSchema>, IssueFollowersResponse> =>
   tool({
     description: "List followers for a Pylon issue by issue ID or issue number.",
-    inputSchema: z.object({
-      id: z.string().describe("Pylon issue ID or issue number"),
-    }),
+    inputSchema: getIssueInputSchema,
     execute: async (args) => listIssueFollowersStep({ apiKey, ...args }),
   });
 
@@ -91,7 +104,9 @@ async function searchIssuesStep({
   return summarizePage(client.issues.search(params));
 }
 
-export const searchIssues = (apiKey: string) =>
+export const searchIssues = (
+  apiKey: string,
+): Tool<z.infer<typeof textSearchParamsSchema>, PageSummary<Issue>> =>
   tool({
     description:
       "Search Pylon issues by filter. Useful for finding support cases by state, account, requester, tag, source, team, or custom fields.",

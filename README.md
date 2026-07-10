@@ -2,7 +2,7 @@
 
 Pylon tools for the [AI SDK](https://ai-sdk.dev). This package wraps the Pylon API as ready-to-use tools for `generateText`, `streamText`, and agent loops.
 
-128 tools cover Pylon's public API: issues, messages, accounts, contacts, users, teams, knowledge bases, custom fields, custom objects, tags, surveys, tasks, projects, training data, audit logs, and more. Mutation tools require approval by default. The client is a small fetch wrapper with local Zod schemas and endpoint metadata derived from Pylon's public OpenAPI docs, so it does not depend on any generated SDK.
+128 tools cover Pylon's public API: issues, messages, accounts, contacts, users, teams, knowledge bases, custom fields, custom objects, tags, surveys, tasks, projects, training data, audit logs, and more. The package includes an approval policy for mutation tools. The client is a small fetch wrapper with local Zod schemas and endpoint metadata derived from Pylon's public OpenAPI docs, so it does not depend on any generated SDK.
 
 ## Installation
 
@@ -16,19 +16,23 @@ pnpm add pylon-tools
 pnpm add ai zod
 ```
 
+`pylon-tools` 0.2 requires AI SDK 7, Node.js 22 or later, and ESM imports.
+
 ## Quick Start
 
 ```ts
 import { streamText } from "ai";
-import { createPylonTools } from "pylon-tools";
+import { createPylonToolApproval, createPylonTools } from "pylon-tools";
+
+const tools = createPylonTools({
+  apiKey: process.env.PYLON_API_KEY,
+  preset: "support",
+});
 
 const result = streamText({
   model,
-  tools: createPylonTools({
-    apiKey: process.env.PYLON_API_KEY,
-    preset: "support",
-    requireApproval: true,
-  }),
+  tools,
+  toolApproval: createPylonToolApproval(),
   prompt: "Find recent Pylon issues for Acme and summarize the open blockers.",
 });
 ```
@@ -86,39 +90,45 @@ Omit `preset` to get all tools, same as `all`.
 
 ## Approval Control
 
-Mutation tools require user approval by default. Read-only tools never require approval.
+AI SDK 7 configures approval at the model or agent call level. `createPylonToolApproval()` marks mutation tools for user approval while leaving read-only tools unaffected.
 
 ```ts
-// Default: all mutation tools require approval
-createPylonTools({ apiKey });
+const tools = createPylonTools({ apiKey, preset: "support" });
 
-// Let mutation tools execute immediately
-createPylonTools({ apiKey, requireApproval: false });
+// Default policy: all mutation tools require user approval
+const toolApproval = createPylonToolApproval();
 
-// Granular approval
-createPylonTools({
-  apiKey,
-  preset: "support",
-  requireApproval: {
-    createIssueReply: false,
-    createIssueNote: false,
-    deleteIssue: true,
-    redactIssueMessage: true,
-  },
+const result = streamText({
+  model,
+  tools,
+  toolApproval,
+  prompt: "Reply to the issue and then redact the sensitive message.",
 });
 ```
 
-The same default applies when cherry-picking OpenAPI-backed endpoint tools directly with `createPylonEndpointTool` or `createPylonEndpointTools`. Pass `needsApproval: false` only when you intentionally want a specific mutation tool to run without approval.
-
-Use `PylonWriteToolName` for a typed approval map:
+Pass `false` to automatically approve every mutation, or use a typed map for granular policy:
 
 ```ts
-import type { PylonWriteToolName } from "pylon-tools";
+const toolApproval = createPylonToolApproval({
+  createIssueReply: false,
+  createIssueNote: false,
+  deleteIssue: true,
+  redactIssueMessage: true,
+});
+
+// Automatically approve every Pylon mutation tool
+const noApprovalPrompts = createPylonToolApproval(false);
+```
+
+Use `ApprovalConfig` for a reusable typed configuration:
+
+```ts
+import type { ApprovalConfig } from "pylon-tools";
 
 const requireApproval = {
   deleteAccount: true,
   updateAccount: false,
-} satisfies Partial<Record<PylonWriteToolName, boolean>>;
+} satisfies ApprovalConfig;
 ```
 
 ## Cherry-Picking Tools
@@ -141,8 +151,13 @@ For the broader OpenAPI-backed tools, use `createPylonEndpointTool` with a typed
 ```ts
 import { createPylonEndpointTool } from "pylon-tools";
 
-const createIssue = createPylonEndpointTool(apiKey, "createIssue", {
-  needsApproval: true,
+const createIssue = createPylonEndpointTool(apiKey, "createIssue");
+
+const result = streamText({
+  model,
+  tools: { createIssue },
+  toolApproval: { createIssue: "user-approval" },
+  prompt: "Create a high-priority issue for the failed deployment.",
 });
 ```
 
@@ -191,7 +206,7 @@ const overrides = {
 const tools = createPylonTools({ apiKey, preset: "support", overrides });
 ```
 
-Supported override properties include `description`, `title`, `strict`, `needsApproval`, `providerOptions`, input streaming callbacks, and `toModelOutput`. Core properties such as `execute`, `inputSchema`, and `outputSchema` cannot be overridden.
+Supported override properties include `description`, `title`, `strict`, `providerOptions`, input streaming callbacks, and `toModelOutput`. Core properties such as `execute`, `inputSchema`, and `outputSchema` cannot be overridden. Configure approval separately with the AI SDK's `toolApproval` option.
 
 ## Tool Selection with toolpick
 
@@ -252,7 +267,7 @@ The client authenticates with `Authorization: Bearer <token>`.
 
 ## Coverage
 
-This package follows Pylon's public OpenAPI document and covers all 128 operations currently published there. Search endpoints are treated as read-only even when the API uses `POST`; create, update, delete, upload, import, reply, redact, snooze, and link operations are treated as mutation tools and are gated by `requireApproval` by default.
+This package follows Pylon's public OpenAPI document and covers all 128 operations currently published there. Search endpoints are treated as read-only even when the API uses `POST`; `createPylonToolApproval()` identifies create, update, delete, upload, import, reply, redact, snooze, and link operations as mutation tools.
 
 Multipart upload endpoints are exposed too. When calling them programmatically, pass fetch-compatible `Blob` or `File` values where the Pylon API expects files, or use `file_url` on endpoints that support URL-based upload.
 
@@ -265,7 +280,6 @@ Returns an object of AI SDK tools ready to pass to `tools`.
 ```ts
 type PylonToolsOptions = {
   apiKey?: string; // defaults to process.env.PYLON_API_KEY
-  requireApproval?: boolean | Partial<Record<PylonWriteToolName, boolean>>;
   preset?: PylonToolPreset | PylonToolPreset[];
   overrides?: Partial<Record<PylonToolName, ToolOverrides>>;
 };
@@ -278,6 +292,17 @@ type PylonToolPreset =
   | "admin"
   | "explorer"
   | "all";
+```
+
+### `createPylonToolApproval(config?)`
+
+Returns an AI SDK 7 `toolApproval` object for Pylon mutation tools. By default, every mutation requires user approval. Pass `false` to automatically approve mutations or a partial `PylonWriteToolName` map to configure individual tools.
+
+```ts
+const toolApproval = createPylonToolApproval({
+  createIssueReply: false,
+  deleteIssue: true,
+});
 ```
 
 ### `createPylonAgent(options)`
@@ -301,11 +326,11 @@ const agent = createPylonAgent({
 | `model`                  | Language model string or provider instance             |
 | `apiKey`                 | Pylon API key, defaults to `process.env.PYLON_API_KEY` |
 | `preset`                 | Optional preset or array of presets to scope tools     |
-| `requireApproval`        | Approval config, same as `createPylonTools`            |
-| `instructions`           | Replaces the built-in system prompt entirely           |
-| `additionalInstructions` | Appended to the built-in system prompt                 |
+| `requireApproval`        | Approval config applied through AI SDK `toolApproval`  |
+| `instructions`           | Replaces the built-in instructions entirely            |
+| `additionalInstructions` | Appended to the built-in instructions                  |
 
-All other `ToolLoopAgent` options such as `stopWhen`, `toolChoice`, and `onStepFinish` are passed through.
+All other `ToolLoopAgent` options such as `stopWhen`, `toolChoice`, and `onStepEnd` are passed through.
 
 ### `createPylonClient(options)`
 

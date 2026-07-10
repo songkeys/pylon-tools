@@ -1,5 +1,6 @@
 import { ToolLoopAgent, type ToolLoopAgentSettings } from "ai";
 import {
+  createPylonToolApproval,
   createPylonTools,
   type ApprovalConfig,
   type PylonToolPreset,
@@ -41,7 +42,10 @@ export function resolveInstructions(options: {
   return defaultPrompt;
 }
 
-type AgentOptions = Omit<ToolLoopAgentSettings, "model" | "tools" | "instructions">;
+type AgentOptions = Omit<
+  ToolLoopAgentSettings,
+  "instructions" | "model" | "toolApproval" | "tools"
+>;
 
 export type CreatePylonAgentOptions = AgentOptions & {
   model: ToolLoopAgentSettings["model"];
@@ -67,11 +71,10 @@ export function createPylonAgent({
 
   if (apiKey !== undefined) toolsOptions.apiKey = apiKey;
   if (preset !== undefined) toolsOptions.preset = preset;
-  if (requireApproval !== undefined) toolsOptions.requireApproval = requireApproval;
-
   return new ToolLoopAgent({
     ...agentOptions,
     tools: createPylonTools(toolsOptions),
+    toolApproval: createPylonToolApproval(requireApproval),
     instructions: resolveInstructions({ additionalInstructions, instructions, preset }),
   });
 }

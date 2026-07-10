@@ -2,7 +2,6 @@ import type { ToolOverrides } from "./types";
 
 const TOOL_OVERRIDE_KEYS = [
   "description",
-  "needsApproval",
   "onInputAvailable",
   "onInputDelta",
   "onInputStart",

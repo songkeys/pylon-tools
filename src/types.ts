@@ -4,7 +4,6 @@ export type ToolOverrides = Partial<
   Pick<
     Tool,
     | "description"
-    | "needsApproval"
     | "onInputAvailable"
     | "onInputDelta"
     | "onInputStart"
